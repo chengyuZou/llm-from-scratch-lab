@@ -1,0 +1,13 @@
+[project]
+name = "llm-from-scratch-lab"
+version = "0.1.0"
+description = "Learn LLM fundamentals from scratch with Python"
+requires-python = ">=3.10"
+dependencies = [
+    "rich",
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
