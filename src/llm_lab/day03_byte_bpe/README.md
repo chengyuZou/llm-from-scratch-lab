@@ -191,6 +191,115 @@ Day02 可能有 `<unk>`。
 
 Day03 如果把 256 个 single-byte token 都加入初始 vocab，就不需要因为未知字符产生 `<unk>`。未知 Unicode 字符会被拆成它自己的 UTF-8 byte 序列。
 
+## Clarification: Is It Just `encode("utf-8")`?
+
+可以这么直觉理解，但要更精确一点。
+
+Day03 不是简单“多一个 `encode='utf-8'` 参数”，而是 tokenizer 的底层 token 单位变了：
+
+```text
+Day02: token 是 str
+Day03: token 是 bytes
+```
+
+也就是说，BPE 操作对象从字符片段变成 byte 片段。
+
+Day02:
+
+```python
+list("你好😀")
+# ["你", "好", "😀"]
+```
+
+Day03:
+
+```python
+raw = "你好😀".encode("utf-8")
+tokens = [bytes([value]) for value in raw]
+```
+
+结果类似：
+
+```python
+[
+    b"\xe4", b"\xbd", b"\xa0",
+    b"\xe5", b"\xa5", b"\xbd",
+    b"\xf0", b"\x9f", b"\x98", b"\x80",
+]
+```
+
+所以 UTF-8 发生在两个关键位置。
+
+### 1. Train / Tokenize 的入口
+
+训练时输入仍然是：
+
+```python
+corpus: list[str]
+```
+
+但每条文本都先变成 UTF-8 bytes：
+
+```python
+raw = text.encode("utf-8")
+tokens = [bytes([value]) for value in raw]
+```
+
+后续 BPE merge 发生在 bytes token 上：
+
+```python
+(b"\xe4", b"\xbd") -> b"\xe4\xbd"
+```
+
+而不是：
+
+```python
+("你", "好") -> "你好"
+```
+
+### 2. Decode 的出口
+
+decode 时不能逐 token decode。
+
+错误方式：
+
+```python
+b"\xe4".decode("utf-8")
+```
+
+单个 byte 可能不是完整 UTF-8 字符，所以会报错。
+
+正确方式：
+
+```python
+raw = b"".join(tokens)
+text = raw.decode("utf-8")
+```
+
+必须先把 byte tokens 拼回完整 byte stream，再 decode 成字符串。
+
+### 3. 类型变化
+
+Day02:
+
+```python
+token_to_id: dict[str, int]
+id_to_token: dict[int, str]
+Pair = tuple[str, str]
+```
+
+Day03:
+
+```python
+token_to_id: dict[bytes, int]
+id_to_token: dict[int, bytes]
+BytePair = tuple[bytes, bytes]
+```
+
+一句话总结：
+
+> Day03 是把 BPE 的最小单位从“字符”下沉到“UTF-8 byte”，从而解决没见过字符就 `<unk>` 的覆盖性问题。
+
 ## What To Observe
 
 重点观察：
